@@ -25,23 +25,28 @@ def get_binary_path(name):
     return f"{name}.exe"
 
 def get_media_duration(input_file):
-    """Obtém duração em segundos usando ffprobe se disponível."""
-    ffprobe_exe = get_binary_path("ffprobe")
+    """Obtém a duração em segundos usando ffmpeg diretamente."""
+    ffmpeg_exe = get_binary_path("ffmpeg")
     try:
         startupinfo = None
         if os.name == 'nt':
             startupinfo = subprocess.STARTUPINFO()
             startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
 
-        cmd = [
-            ffprobe_exe,
-            "-v", "error",
-            "-show_entries", "format=duration",
-            "-of", "default=noprint_wrappers=1:nokey=1",
-            input_file
-        ]
-        out = subprocess.check_output(cmd, startupinfo=startupinfo, encoding="utf-8", errors="replace")
-        return float(out.strip())
+        cmd = [ffmpeg_exe, "-i", input_file]
+        res = subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            startupinfo=startupinfo,
+            text=True,
+            errors="replace"
+        )
+        match = re.search(r'Duration:\s*(\d{2}):(\d{2}):(\d{2}\.?\d*)', res.stderr)
+        if match:
+            h, m, s = float(match.group(1)), float(match.group(2)), float(match.group(3))
+            return h * 3600 + m * 60 + s
+        return None
     except Exception:
         return None
 

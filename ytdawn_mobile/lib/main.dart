@@ -44,12 +44,14 @@ class YTDawnHomePage extends StatefulWidget {
   State<YTDawnHomePage> createState() => _YTDawnHomePageState();
 }
 
-class _YTDawnHomePageState extends State<YTDawnHomePage> with SingleTickerProviderStateMixin {
+class _YTDawnHomePageState extends State<YTDawnHomePage> {
   static const platform = MethodChannel('com.clebjr.ytdawn/engine');
 
-  late TabController _tabController;
   final TextEditingController _urlsController = TextEditingController();
+  final ScrollController _mainScrollController = ScrollController();
   final ScrollController _logScrollController = ScrollController();
+
+  int _activeTabIndex = 0; // 0 = Download, 1 = Conversão
 
   // Opções de Download
   String _dlFormat = 'MP4 (Vídeo)';
@@ -77,15 +79,14 @@ class _YTDawnHomePageState extends State<YTDawnHomePage> with SingleTickerProvid
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
     _setupMethodChannel();
     _initAppEnvironment();
   }
 
   @override
   void dispose() {
-    _tabController.dispose();
     _urlsController.dispose();
+    _mainScrollController.dispose();
     _logScrollController.dispose();
     super.dispose();
   }
@@ -203,7 +204,6 @@ class _YTDawnHomePageState extends State<YTDawnHomePage> with SingleTickerProvid
 
   Future<void> _toggleDownload() async {
     if (_isBusy) {
-      // Cancelar
       await platform.invokeMethod('cancelTask');
       setState(() {
         _isBusy = false;
@@ -229,6 +229,9 @@ class _YTDawnHomePageState extends State<YTDawnHomePage> with SingleTickerProvid
       _showNotificationSnackBar('Nenhum link válido encontrado (deve iniciar com http).', isError: true);
       return;
     }
+
+    // Fecha o teclado ao iniciar
+    FocusScope.of(context).unfocus();
 
     setState(() {
       _isBusy = true;
@@ -295,6 +298,8 @@ class _YTDawnHomePageState extends State<YTDawnHomePage> with SingleTickerProvid
       return;
     }
 
+    FocusScope.of(context).unfocus();
+
     setState(() {
       _isBusy = true;
       _currentTaskMode = 'convert';
@@ -360,28 +365,33 @@ class _YTDawnHomePageState extends State<YTDawnHomePage> with SingleTickerProvid
     );
   }
 
-  // ==================== BUILD UI ====================
+  // ==================== BUILD UI RESPONSIVA COM SCROLL COMPLETO ====================
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       body: SafeArea(
-        child: Column(
-          children: [
-            _buildHeader(),
-            _buildTabBar(),
-            Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                children: [
-                  _buildDownloadTab(),
-                  _buildConvertTab(),
-                ],
+        child: SingleChildScrollView(
+          controller: _mainScrollController,
+          physics: const BouncingScrollPhysics(),
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildHeader(),
+              _buildTabBar(),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 200),
+                child: _activeTabIndex == 0 ? _buildDownloadTab() : _buildConvertTab(),
               ),
-            ),
-            _buildProgressAndStatusPanel(),
-            _buildLogConsole(),
-          ],
+              _buildProgressAndStatusPanel(),
+              _buildLogConsole(),
+              const SizedBox(height: 16),
+            ],
+          ),
         ),
       ),
     );
@@ -555,7 +565,7 @@ class _YTDawnHomePageState extends State<YTDawnHomePage> with SingleTickerProvid
     );
   }
 
-  // Segmented Tabs
+  // Segmented Tabs com alternância direta
   Widget _buildTabBar() {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
@@ -564,20 +574,50 @@ class _YTDawnHomePageState extends State<YTDawnHomePage> with SingleTickerProvid
         color: const Color(0xFF100C22),
         borderRadius: BorderRadius.circular(10),
       ),
-      child: TabBar(
-        controller: _tabController,
-        indicator: BoxDecoration(
-          color: const Color(0xFFEA3A8E),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        indicatorSize: TabBarIndicatorSize.tab,
-        dividerColor: Colors.transparent,
-        labelColor: Colors.white,
-        unselectedLabelColor: const Color(0xFF9D95C4),
-        labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-        tabs: const [
-          Tab(text: 'Download'),
-          Tab(text: 'Conversão'),
+      child: Row(
+        children: [
+          Expanded(
+            child: InkWell(
+              onTap: () => setState(() => _activeTabIndex = 0),
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: _activeTabIndex == 0 ? const Color(0xFFEA3A8E) : Colors.transparent,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  'Download',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    color: _activeTabIndex == 0 ? Colors.white : const Color(0xFF9D95C4),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: InkWell(
+              onTap: () => setState(() => _activeTabIndex = 1),
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: _activeTabIndex == 1 ? const Color(0xFFEA3A8E) : Colors.transparent,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  'Conversão',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    color: _activeTabIndex == 1 ? Colors.white : const Color(0xFF9D95C4),
+                  ),
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -588,7 +628,8 @@ class _YTDawnHomePageState extends State<YTDawnHomePage> with SingleTickerProvid
   Widget _buildDownloadTab() {
     final isAudio = _dlFormat.contains('MP3');
 
-    return SingleChildScrollView(
+    return Padding(
+      key: const ValueKey('tab_download'),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -777,7 +818,8 @@ class _YTDawnHomePageState extends State<YTDawnHomePage> with SingleTickerProvid
   // ==================== ABA 2: CONVERSÃO ====================
 
   Widget _buildConvertTab() {
-    return SingleChildScrollView(
+    return Padding(
+      key: const ValueKey('tab_convert'),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1049,7 +1091,7 @@ class _YTDawnHomePageState extends State<YTDawnHomePage> with SingleTickerProvid
   Widget _buildLogConsole() {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-      height: 120,
+      height: 130,
       decoration: BoxDecoration(
         color: const Color(0xFF0C071E),
         borderRadius: BorderRadius.circular(10),
@@ -1100,6 +1142,7 @@ class _YTDawnHomePageState extends State<YTDawnHomePage> with SingleTickerProvid
           Expanded(
             child: ListView.builder(
               controller: _logScrollController,
+              physics: const ClampingScrollPhysics(),
               padding: const EdgeInsets.all(6),
               itemCount: _logs.length,
               itemBuilder: (ctx, idx) {
@@ -1155,9 +1198,10 @@ class _YouTubeLoginSheetState extends State<YouTubeLoginSheet> {
   @override
   void initState() {
     super.initState();
-    // Inicia verificação periódica de cookies a cada 3 segundos
     _cookieCheckTimer = Timer.periodic(const Duration(seconds: 3), (_) {
-      _checkAndExtractCookies(silent: true);
+      if (mounted) {
+        _checkAndExtractCookies(silent: true);
+      }
     });
   }
 
@@ -1186,12 +1230,13 @@ class _YouTubeLoginSheetState extends State<YouTubeLoginSheet> {
       }
 
       if (hasAuthCookie) {
-        setState(() {
-          _statusText = 'Login detectado! Gerando cookies.txt...';
-          _isExtracting = true;
-        });
+        if (mounted) {
+          setState(() {
+            _statusText = 'Login detectado! Gerando cookies.txt...';
+            _isExtracting = true;
+          });
+        }
 
-        // Formata cookies em formato Netscape
         final netscapeBuffer = StringBuffer();
         netscapeBuffer.writeln('# Netscape HTTP Cookie File');
         netscapeBuffer.writeln('# https://curl.se/docs/http-cookies.html');
@@ -1215,12 +1260,10 @@ class _YouTubeLoginSheetState extends State<YouTubeLoginSheet> {
 
         final content = netscapeBuffer.toString();
 
-        // Salva nos arquivos locais do app
         final appDir = await getApplicationDocumentsDirectory();
         final cookieFile = File('${appDir.path}/cookies.txt');
         await cookieFile.writeAsString(content);
 
-        // Tenta também salvar na pasta pública /sdcard/Download/YTDawn
         try {
           final pubDir = Directory('/storage/emulated/0/Download/YTDawn');
           if (await pubDir.exists()) {

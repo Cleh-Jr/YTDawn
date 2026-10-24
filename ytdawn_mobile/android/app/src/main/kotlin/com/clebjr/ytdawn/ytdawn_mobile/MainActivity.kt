@@ -5,6 +5,7 @@ import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import com.yausername.ffmpeg.FFmpeg
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLException
 import com.yausername.youtubedl_android.YoutubeDLRequest
@@ -36,11 +37,24 @@ class MainActivity : FlutterActivity() {
                 "initEngine" -> {
                     thread {
                         try {
+                            // Inicializa YoutubeDL
                             YoutubeDL.getInstance().init(applicationContext)
+
+                            // Inicializa FFmpeg para mesclagem e conversão de áudio/vídeo
+                            try {
+                                FFmpeg.getInstance().init(applicationContext)
+                                postToMain { sendLog("[Sistema] Motor FFmpeg inicializado e pronto para mesclagem.") }
+                            } catch (fe: Exception) {
+                                Log.e("YTDawn", "Erro ao inicializar FFmpeg", fe)
+                                postToMain { sendLog("[Aviso] Inicialização FFmpeg: ${fe.localizedMessage}") }
+                            }
+
                             postToMain {
-                                sendLog("[Sistema] Engine YTDawn (yt-dlp + FFmpeg) inicializada.")
+                                sendLog("[Sistema] Engine YTDawn (yt-dlp + FFmpeg) inicializada com sucesso.")
                                 result.success(true)
                             }
+
+                            // Checa e atualiza yt-dlp em segundo plano para a versão mais recente
                             try {
                                 postToMain { sendLog("[Atualização] Verificando versão mais recente do yt-dlp...") }
                                 val status = YoutubeDL.getInstance().updateYoutubeDL(applicationContext, YoutubeDL.UpdateChannel._STABLE)
@@ -170,6 +184,41 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    private fun findFFmpegExecutable(): File? {
+        val noBackup = applicationContext.noBackupFilesDir
+        val appFiles = applicationContext.filesDir
+        val candidates = listOf(
+            File(noBackup, "youtubedl-android/packages/ffmpeg/bin/ffmpeg"),
+            File(noBackup, "youtubedl-android/packages/ffmpeg/usr/bin/ffmpeg"),
+            File(noBackup, "youtubedl-android/packages/ffmpeg/ffmpeg"),
+            File(appFiles, "usr/bin/ffmpeg"),
+            File(appFiles, "bin/ffmpeg"),
+            File(appFiles, "ffmpeg"),
+            File(applicationContext.applicationInfo.nativeLibraryDir, "libffmpeg.so")
+        )
+        for (c in candidates) {
+            if (c.exists() && c.canExecute()) return c
+        }
+
+        // Busca recursiva em noBackup
+        try {
+            val foundNoBackup = noBackup.walkTopDown().firstOrNull {
+                (it.name == "ffmpeg" || it.name == "libffmpeg.so") && it.canExecute()
+            }
+            if (foundNoBackup != null) return foundNoBackup
+        } catch (_: Exception) {}
+
+        // Busca recursiva em filesDir
+        try {
+            val foundFiles = appFiles.walkTopDown().firstOrNull {
+                (it.name == "ffmpeg" || it.name == "libffmpeg.so") && it.canExecute()
+            }
+            if (foundFiles != null) return foundFiles
+        } catch (_: Exception) {}
+
+        return null
+    }
+
     private fun startDownloadQueue(
         urls: List<String>,
         format: String,
@@ -188,9 +237,14 @@ class MainActivity : FlutterActivity() {
                 sendLog("=== INICIANDO DOWNLOAD (${total} link(s)) ===")
                 sendLog("Formato: $format | Resolução: $resolution | Compressão: $compression")
                 sendLog("Destino: ${destDir.absolutePath}")
-                if (!cookiesPath.isNullOrEmpty() && File(cookiesPath).exists()) {
-                    sendLog("[Cookies] Usando cookies de: ${File(cookiesPath).name}")
-                }
+            }
+
+            // Localiza e informa FFmpeg
+            val ffmpegBin = findFFmpegExecutable()
+            if (ffmpegBin != null) {
+                postToMain { sendLog("[FFmpeg] Binário ativo: ${ffmpegBin.absolutePath}") }
+            } else {
+                postToMain { sendLog("[FFmpeg] Usando motor interno do youtubedl-android.") }
             }
 
             val isVideo = format.contains("MP4")
@@ -216,6 +270,12 @@ class MainActivity : FlutterActivity() {
                     request.addOption("--embed-metadata")
                     request.addOption("--embed-thumbnail")
 
+                    // Configura localização do FFmpeg para garantir a mesclagem dos arquivos
+                    if (ffmpegBin != null) {
+                        request.addOption("--ffmpeg-location", ffmpegBin.parentFile.absolutePath)
+                    }
+
+                    // Cookies: verifica o caminho passado ou busca cookies.txt existente
                     val cookieFile = if (!cookiesPath.isNullOrEmpty() && File(cookiesPath).exists()) {
                         File(cookiesPath)
                     } else {
@@ -224,6 +284,7 @@ class MainActivity : FlutterActivity() {
                     }
 
                     if (cookieFile != null) {
+                        postToMain { sendLog("[Cookies] Usando cookies de: ${cookieFile.name}") }
                         request.addOption("--cookies", cookieFile.absolutePath)
                     }
 
@@ -233,7 +294,7 @@ class MainActivity : FlutterActivity() {
                         request.addOption("--audio-format", "mp3")
                         request.addOption("--audio-quality", "0")
                     } else {
-                        // Vídeo MP4 com limite de resolução
+                        // Vídeo MP4 com limite de resolução e mesclagem garantida
                         val maxH = if (resolution.contains("1080")) 1080 else 720
                         val filter = "bv*[height<=$maxH][ext=mp4]+ba[ext=m4a] / bv*[height<=$maxH]+ba / b[height<=$maxH][ext=mp4] / b[height<=$maxH] / bv*+ba / b"
                         request.addOption("-f", filter)
@@ -268,7 +329,7 @@ class MainActivity : FlutterActivity() {
 
                     anySuccess = true
                     postToMain {
-                        sendLog("[$currentIdx/$total] [SUCESSO] Download concluído!")
+                        sendLog("[$currentIdx/$total] [SUCESSO] Download e mesclagem concluídos com sucesso!")
                         sendProgress(100.0, "[$currentIdx/$total] Concluído!")
                     }
 
@@ -294,20 +355,6 @@ class MainActivity : FlutterActivity() {
                 }
             }
         }
-    }
-
-    private fun findFFmpegExecutable(): File? {
-        val appFiles = applicationContext.filesDir
-        val candidates = listOf(
-            File(appFiles, "usr/bin/ffmpeg"),
-            File(appFiles, "bin/ffmpeg"),
-            File(appFiles, "ffmpeg"),
-            File(applicationContext.applicationInfo.nativeLibraryDir, "libffmpeg.so")
-        )
-        for (c in candidates) {
-            if (c.exists() && c.canExecute()) return c
-        }
-        return appFiles.walkTopDown().firstOrNull { (it.name == "ffmpeg" || it.name == "libffmpeg.so") && it.canExecute() }
     }
 
     private fun startConversionTask(

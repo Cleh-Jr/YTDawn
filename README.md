@@ -49,9 +49,28 @@ Alguns vídeos e músicas com proteção do YouTube exigem que você esteja aute
 
 ---
 
+## 📱 YTDawn Mobile (Android)
+
+O **YTDawn Mobile** traz a mesma experiência fácil para leigos e o tema Aurora para o seu celular Android!
+
+### Destaques da versão Mobile:
+- **Motor `youtubedl-android` + `FFmpeg`:** O mesmo motor moderno e veloz utilizado pelo Seal.
+- **Login In-App do YouTube:** Faça login direto na sua conta do Google/YouTube dentro do app através do botão **`🍪 Login YT`**. Os cookies no formato Netscape são extraídos e salvos automaticamente, sem precisar de extensões ou exportações manuais no celular!
+- **Download em Segundo Plano com Progresso em Tempo Real:** Acompanhe a velocidade, porcentagem e terminal de log.
+- **Integração com Galeria e Meus Arquivos:** Downloads salvos diretamente em `/storage/emulated/0/Download/YTDawn/`.
+- **Compartilhamento Rápido:** Botão `📁 Pasta` para enviar seus vídeos e áudios diretamente para o WhatsApp, Telegram ou redes sociais.
+
+---
+
 ## 📁 Como Executar
 
-1. Baixe o pacote compactado na aba **[Releases](../../releases)**.
+### Versão Desktop (Windows):
+1. Baixe o pacote compactado na aba **[Releases](../../releases)** (`YTDawn-v1.0.0-Portable.zip`).
 2. Extraia o arquivo `.zip` em qualquer pasta ou pendrive.
 3. Dê um duplo clique em **`YTDawn.exe`** ou em **`Iniciar_YTDawn.bat`**.
+
+### Versão Mobile (Android):
+1. Baixe o arquivo APK na aba **[Releases](../../releases)** (`YTDawn-Mobile-v1.0.0.apk`).
+2. Instale no seu aparelho Android e abra o app.
+3. Conecte sua conta do YouTube no botão `🍪 Login YT` e aproveite downloads ilimitados!
 

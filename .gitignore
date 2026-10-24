@@ -1,4 +1,4 @@
-﻿# Python
+# Python
 __pycache__/
 *.py[cod]
 *.class
@@ -6,9 +6,14 @@ __pycache__/
 
 # Build & Dist
 build/
+**/build/
 dist/
 *.zip
 *.tar.gz
+*.apk
+.dart_tool/
+**/.dart_tool/
+ytdawn_screen.png
 
 # Binaries
 bin/
